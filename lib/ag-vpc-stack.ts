@@ -71,6 +71,39 @@ export class AgVpcStack extends cdk.Stack {
         notebookPolicy.attachToRole(notebookRole)
         kmsKeyPolicy.attachToRole(notebookRole)
 
+        const notebookLifecycleConfig = new sagemaker.CfnNotebookInstanceLifecycleConfig(this, 'NotebookLifecycleConfig', {
+          notebookInstanceLifecycleConfigName: 'AgNotebookLifecycleConfig',
+          onCreate: [
+            {
+                content: cdk.Fn.base64(
+                    `
+#!/bin/bash
+set -e
+if [ ! -d /home/ec2-user/ag_bootstrapped ]; then
+mkdir -p /home/ec2-user/SageMaker/
+echo 'AG_SECURITY_GROUP=${securityGroup.securityGroupId}' > /home/ec2-user/SageMaker/ag.props
+echo 'AG_SUBNETS=${vpc.privateSubnets.map(subnet => subnet.subnetId).join(",")}' >> /home/ec2-user/SageMaker/ag.props
+echo 'AG_KMS_KEY=${key.keyArn}' >> /home/ec2-user/SageMaker/ag.props
+
+mkdir ag-tmp
+cd ag-tmp
+aws s3 cp s3://autogluon-sm-training/222/ag-tutorial.zip .
+unzip ag-tutorial.zip
+mv ag-tutorial/* /home/ec2-user/SageMaker/
+chown ec2-user:ec2-user -R /home/ec2-user/SageMaker/
+cd ..
+rm -rf ag-tmp
+sudo touch /home/ec2-user/ag_bootstrapped
+fi
+`
+                ),
+            }
+        ]
+        
+      });
+
+
+
         const sagemakerNotebook = new sagemaker.CfnNotebookInstance(this, 'ML Notebook' , {
           instanceType: 'ml.m5.2xlarge',
           roleArn: notebookRole.roleArn,
@@ -80,7 +113,9 @@ export class AgVpcStack extends cdk.Stack {
           directInternetAccess: "Disabled",
           subnetId: vpc.privateSubnets[0].subnetId,
           securityGroupIds: [securityGroup.securityGroupId],
-          volumeSizeInGb: 20
+          volumeSizeInGb: 20,
+          lifecycleConfigName: notebookLifecycleConfig.attrNotebookInstanceLifecycleConfigName
+          
         });
 
         new cdk.CfnOutput(this, 'AGKmsKeyId', {value: key.keyArn});
