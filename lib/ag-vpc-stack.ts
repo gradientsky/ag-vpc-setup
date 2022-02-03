@@ -37,5 +37,13 @@ export class AgVpcStack extends cdk.Stack {
     const securityGroup = new ec2.SecurityGroup(this, 'LaunchTemplateSG', {
       vpc: vpc,
     })
+
+    new cdk.CfnOutput(this, 'AGKmsKeyId', { value: key.keyArn });
+    new cdk.CfnOutput(this, 'AGSubnets', { value: vpc.privateSubnets.map(subnet => subnet.subnetId).join(",")
+
+  });
+    
+
+
   }
 }
