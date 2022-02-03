@@ -1,49 +1,70 @@
 import * as cdk from '@aws-cdk/core';
 import * as ec2 from '@aws-cdk/aws-ec2';
 import * as kms from '@aws-cdk/aws-kms';
+import * as iam from '@aws-cdk/aws-iam';
+import * as sagemaker from '@aws-cdk/aws-sagemaker';
 
 export class AgVpcStack extends cdk.Stack {
-  constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
-    super(scope, id, props);
+    constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
+        super(scope, id, props);
 
-    const key = new kms.Key(this, 'ag-kms-key', {
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      pendingWindow: cdk.Duration.days(7),
-      alias: 'alias/agkey',
-      description: 'KMS key for encrypting the objects in an S3 bucket',
-      enableKeyRotation: false,
-    });
+        const key = new kms.Key(this, 'ag-kms-key', {
+            removalPolicy: cdk.RemovalPolicy.DESTROY,
+            pendingWindow: cdk.Duration.days(7),
+            enableKeyRotation: false,
+        });
 
-    const vpc = new ec2.Vpc(this, "Vpc", {
-      maxAzs: 3,
-      subnetConfiguration: [
-        {
-          cidrMask: 24,
-          name: 'ag-private-1',
-          subnetType: ec2.SubnetType.PRIVATE_WITH_NAT,
-        },
-        {
-          cidrMask: 24,
-          name: 'ag-public-1',
-          subnetType: ec2.SubnetType.PUBLIC,
-        }
-      ]
-    });
+        const vpc = new ec2.Vpc(this, "Vpc", {
+            maxAzs: 3,
+            subnetConfiguration: [
+                {
+                    cidrMask: 24,
+                    name: 'AgPrivate',
+                    subnetType: ec2.SubnetType.PRIVATE_WITH_NAT,
+                },
+                {
+                    cidrMask: 24,
+                    name: 'AgPublic',
+                    subnetType: ec2.SubnetType.PUBLIC,
+                }
+            ]
+        });
 
-    vpc.addGatewayEndpoint('S3Endpoint', {
-      service: ec2.GatewayVpcEndpointAwsService.S3
-    });
+        vpc.addGatewayEndpoint('S3Endpoint', {
+            service: ec2.GatewayVpcEndpointAwsService.S3
+        });
 
-    const securityGroup = new ec2.SecurityGroup(this, 'LaunchTemplateSG', {
-      vpc: vpc,
-    })
+        const securityGroup = new ec2.SecurityGroup(this, 'AG-security-group', {
+            vpc: vpc,
+        })
 
-    new cdk.CfnOutput(this, 'AGKmsKeyId', { value: key.keyArn });
-    new cdk.CfnOutput(this, 'AGSubnets', { value: vpc.privateSubnets.map(subnet => subnet.subnetId).join(",")
+        const notebookRole = new iam.Role(this, 'AG-notebookAccessRole', {
+            assumedBy: new iam.ServicePrincipal('sagemaker')
+        })
 
-  });
-    
+        const notebookPolicy = new iam.Policy(this, 'AG-notebookAccessPolicy', {
+            policyName: 'notebookAccessPolicy',
+            statements: [new iam.PolicyStatement({actions: ['s3:*'], resources: ['*']})]
+        })
 
+        notebookPolicy.attachToRole(notebookRole)
 
-  }
+        new cdk.CfnOutput(this, 'AGKmsKeyId', {value: key.keyArn});
+        new cdk.CfnOutput(this, 'AGSubnets', {
+            value: vpc.privateSubnets.map(subnet => subnet.subnetId).join(",")
+        });
+
+        const sagemakerNotebook = new sagemaker.CfnNotebookInstance(this, 'ML Notebook' , {
+          instanceType: 'ml.m5.2xlarge',
+          roleArn: notebookRole.roleArn,
+          kmsKeyId: key.keyId,
+          // defaultCodeRepository: repo.repositoryCloneUrlHttp,
+          notebookInstanceName: "AutoGluonNotebook",
+          directInternetAccess: "Disabled",
+          subnetId: vpc.privateSubnets[0].subnetId,
+          securityGroupIds: [securityGroup.securityGroupId],
+          volumeSizeInGb: 20
+        });
+
+    }
 }
