@@ -39,7 +39,11 @@ export class AgVpcStack extends cdk.Stack {
         })
 
         const notebookRole = new iam.Role(this, 'AG-notebookAccessRole', {
-            assumedBy: new iam.ServicePrincipal('sagemaker')
+            assumedBy: new iam.ServicePrincipal('sagemaker'),
+            managedPolicies: [
+              iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSageMakerFullAccess'),
+              iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonEC2ReadOnlyAccess')
+            ]
         })
 
         const notebookPolicy = new iam.Policy(this, 'AG-notebookAccessPolicy', {
@@ -47,12 +51,25 @@ export class AgVpcStack extends cdk.Stack {
             statements: [new iam.PolicyStatement({actions: ['s3:*'], resources: ['*']})]
         })
 
-        notebookPolicy.attachToRole(notebookRole)
+        const kmsKeyPolicy = new iam.Policy(this, 'AG-notebookAccessPolicy-kms', {
+          policyName: 'notebookAccessPolicyKms',
+          statements: [new iam.PolicyStatement({
+            actions: [
+              "kms:Encrypt",
+              "kms:Decrypt",
+              "kms:ReEncrypt*",
+              "kms:GenerateDataKey*",
+              "kms:DescribeKey",
+              "kms:GetKeyPolicy",
+              "kms:CreateGrant",
+              "kms:ListGrants",
+              "kms:RevokeGrant"],
+            resources: [key.keyArn]
+          })]
+        })
 
-        new cdk.CfnOutput(this, 'AGKmsKeyId', {value: key.keyArn});
-        new cdk.CfnOutput(this, 'AGSubnets', {
-            value: vpc.privateSubnets.map(subnet => subnet.subnetId).join(",")
-        });
+        notebookPolicy.attachToRole(notebookRole)
+        kmsKeyPolicy.attachToRole(notebookRole)
 
         const sagemakerNotebook = new sagemaker.CfnNotebookInstance(this, 'ML Notebook' , {
           instanceType: 'ml.m5.2xlarge',
@@ -66,5 +83,10 @@ export class AgVpcStack extends cdk.Stack {
           volumeSizeInGb: 20
         });
 
+        new cdk.CfnOutput(this, 'AGKmsKeyId', {value: key.keyArn});
+        new cdk.CfnOutput(this, 'AGSubnets', {
+            value: vpc.privateSubnets.map(subnet => subnet.subnetId).join(",")
+        });
+        new cdk.CfnOutput(this, 'AGSecurityGroup', {value: securityGroup.securityGroupId});
     }
 }
