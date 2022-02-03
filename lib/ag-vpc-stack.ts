@@ -8,6 +8,10 @@ export class AgVpcStack extends cdk.Stack {
     constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
         super(scope, id, props);
 
+        const bootstrapArchive = new cdk.CfnParameter(this, "BootstrapArchive", {
+          type: "String",
+          description: "Archive in S3 to download and extract to SageMaker directory."});
+
         const key = new kms.Key(this, 'ag-kms-key', {
             removalPolicy: cdk.RemovalPolicy.DESTROY,
             pendingWindow: cdk.Duration.days(7),
@@ -87,9 +91,8 @@ echo 'AG_KMS_KEY=${key.keyArn}' >> /home/ec2-user/SageMaker/ag.props
 
 mkdir ag-tmp
 cd ag-tmp
-aws s3 cp s3://autogluon-sm-training/222/ag-tutorial.zip .
-unzip ag-tutorial.zip
-mv ag-tutorial/* /home/ec2-user/SageMaker/
+aws s3 cp ${bootstrapArchive.valueAsString} bootstrap.zip
+unzip bootstrap.zip -d /home/ec2-user/SageMaker/
 chown ec2-user:ec2-user -R /home/ec2-user/SageMaker/
 cd ..
 rm -rf ag-tmp
