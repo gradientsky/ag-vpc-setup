@@ -1,16 +1,18 @@
-import * as cdk from '@aws-cdk/core';
-import * as ec2 from '@aws-cdk/aws-ec2';
-import * as kms from '@aws-cdk/aws-kms';
-import * as iam from '@aws-cdk/aws-iam';
-import * as sagemaker from '@aws-cdk/aws-sagemaker';
+import * as cdk from 'aws-cdk-lib';
+import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as kms from 'aws-cdk-lib/aws-kms';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import { Construct } from 'constructs';
+import * as sagemaker from 'aws-cdk-lib/aws-sagemaker';
 
 export class AgVpcStack extends cdk.Stack {
-    constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
+    constructor(scope: Construct, id: string, props?: cdk.StackProps) {
         super(scope, id, props);
 
         const bootstrapArchive = new cdk.CfnParameter(this, "BootstrapArchive", {
-          type: "String",
-          description: "Archive in S3 to download and extract to SageMaker directory."});
+            type: "String",
+            description: "Archive in S3 to download and extract to SageMaker directory."
+        });
 
         const key = new kms.Key(this, 'ag-kms-key', {
             removalPolicy: cdk.RemovalPolicy.DESTROY,
@@ -24,7 +26,7 @@ export class AgVpcStack extends cdk.Stack {
                 {
                     cidrMask: 24,
                     name: 'AgPrivate',
-                    subnetType: ec2.SubnetType.PRIVATE_WITH_NAT,
+                    subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
                 },
                 {
                     cidrMask: 24,
@@ -45,8 +47,8 @@ export class AgVpcStack extends cdk.Stack {
         const notebookRole = new iam.Role(this, 'AG-notebookAccessRole', {
             assumedBy: new iam.ServicePrincipal('sagemaker'),
             managedPolicies: [
-              iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSageMakerFullAccess'),
-              iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonEC2ReadOnlyAccess')
+                iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSageMakerFullAccess'),
+                iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonEC2ReadOnlyAccess')
             ]
         })
 
@@ -56,31 +58,31 @@ export class AgVpcStack extends cdk.Stack {
         })
 
         const kmsKeyPolicy = new iam.Policy(this, 'AG-notebookAccessPolicy-kms', {
-          policyName: 'notebookAccessPolicyKms',
-          statements: [new iam.PolicyStatement({
-            actions: [
-              "kms:Encrypt",
-              "kms:Decrypt",
-              "kms:ReEncrypt*",
-              "kms:GenerateDataKey*",
-              "kms:DescribeKey",
-              "kms:GetKeyPolicy",
-              "kms:CreateGrant",
-              "kms:ListGrants",
-              "kms:RevokeGrant"],
-            resources: [key.keyArn]
-          })]
+            policyName: 'notebookAccessPolicyKms',
+            statements: [new iam.PolicyStatement({
+                actions: [
+                    "kms:Encrypt",
+                    "kms:Decrypt",
+                    "kms:ReEncrypt*",
+                    "kms:GenerateDataKey*",
+                    "kms:DescribeKey",
+                    "kms:GetKeyPolicy",
+                    "kms:CreateGrant",
+                    "kms:ListGrants",
+                    "kms:RevokeGrant"],
+                resources: [key.keyArn]
+            })]
         })
 
         notebookPolicy.attachToRole(notebookRole)
         kmsKeyPolicy.attachToRole(notebookRole)
 
         const notebookLifecycleConfig = new sagemaker.CfnNotebookInstanceLifecycleConfig(this, 'NotebookLifecycleConfig', {
-          notebookInstanceLifecycleConfigName: 'AgNotebookLifecycleConfig',
-          onCreate: [
-            {
-                content: cdk.Fn.base64(
-                    `
+            notebookInstanceLifecycleConfigName: 'AgNotebookLifecycleConfig',
+            onCreate: [
+                {
+                    content: cdk.Fn.base64(
+                        `
 #!/bin/bash
 set -e
 if [ ! -d /home/ec2-user/ag_bootstrapped ]; then
@@ -99,26 +101,26 @@ rm -rf ag-tmp
 sudo touch /home/ec2-user/ag_bootstrapped
 fi
 `
-                ),
-            }
-        ]
-        
-      });
+                    ),
+                }
+            ]
+
+        });
 
 
+        const sagemakerNotebook = new sagemaker.CfnNotebookInstance(this, 'ML Notebook', {
+            instanceType: 'ml.m5.4xlarge',
+            roleArn: notebookRole.roleArn,
+            kmsKeyId: key.keyId,
+            // defaultCodeRepository: repo.repositoryCloneUrlHttp,
+            notebookInstanceName: "AutoGluonNotebook",
+            platformIdentifier: "notebook-al2-v2",
+            directInternetAccess: "Disabled",
+            subnetId: vpc.privateSubnets[0].subnetId,
+            securityGroupIds: [securityGroup.securityGroupId],
+            volumeSizeInGb: 20,
+            lifecycleConfigName: notebookLifecycleConfig.attrNotebookInstanceLifecycleConfigName
 
-        const sagemakerNotebook = new sagemaker.CfnNotebookInstance(this, 'ML Notebook' , {
-          instanceType: 'ml.m5.2xlarge',
-          roleArn: notebookRole.roleArn,
-          kmsKeyId: key.keyId,
-          // defaultCodeRepository: repo.repositoryCloneUrlHttp,
-          notebookInstanceName: "AutoGluonNotebook",
-          directInternetAccess: "Disabled",
-          subnetId: vpc.privateSubnets[0].subnetId,
-          securityGroupIds: [securityGroup.securityGroupId],
-          volumeSizeInGb: 20,
-          lifecycleConfigName: notebookLifecycleConfig.attrNotebookInstanceLifecycleConfigName
-          
         });
 
         new cdk.CfnOutput(this, 'AGKmsKeyId', {value: key.keyArn});

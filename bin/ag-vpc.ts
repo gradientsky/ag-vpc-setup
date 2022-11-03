@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import 'source-map-support/register';
-import * as cdk from '@aws-cdk/core';
+import * as cdk from 'aws-cdk-lib';
 import { AgVpcStack } from '../lib/ag-vpc-stack';
 
 const env_west = { region: 'us-west-2' };
