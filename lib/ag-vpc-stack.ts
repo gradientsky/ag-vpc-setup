@@ -119,8 +119,10 @@ fi
             subnetId: vpc.privateSubnets[0].subnetId,
             securityGroupIds: [securityGroup.securityGroupId],
             volumeSizeInGb: 20,
-            lifecycleConfigName: notebookLifecycleConfig.attrNotebookInstanceLifecycleConfigName
-
+            lifecycleConfigName: notebookLifecycleConfig.attrNotebookInstanceLifecycleConfigName,
+            instanceMetadataServiceConfiguration: {
+                minimumInstanceMetadataServiceVersion: "2"
+            }
         });
 
         new cdk.CfnOutput(this, 'AGKmsKeyId', {value: key.keyArn});
