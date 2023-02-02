@@ -1,6 +1,6 @@
-# Cloud Endpoint Deployment with AWS SageMaker
+# Creating SageMaker Notebook infrastructure in minutes
 
-Deploying an AutoGluon model to the cloud is easy and can be done in a few of minutes. 
+This project will help to quickly deploy infrastructure for development in SageMaker notbooks.
 
 ## Infrastructure Setup
 
