@@ -1,6 +1,6 @@
 # Creating SageMaker Notebook infrastructure in minutes
 
-This project will help to quickly deploy infrastructure for development in SageMaker notbooks.
+This project will help to quickly deploy infrastructure for development in SageMaker notebooks.
 
 ## Infrastructure Setup
 
